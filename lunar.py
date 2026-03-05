@@ -1,11 +1,4 @@
-# bot.py
-# -*- coding: utf-8 -*-
-# Bot Discord completo: Ticket, Moderazione, Minigiochi (Tris vs bot/utente), Economia, AI (stub disattivata)
-# Requisiti: python 3.10+, discord.py 2.x
-# Avvio:
-#   - pip install -U discord.py
-#   - Imposta DISCORD_TOKEN nell'ambiente
-#   - python bot.py
+
 
 import os
 import re
@@ -31,11 +24,11 @@ def load_data():
             "logs_channel_id": None,
             "ticket_category_id": None,
             "ticket_counter": 1,
-            "tickets": {},  # ticket_channel_id -> {"owner_id": int, "claimed_by": int|None}
-            "economy": {},  # user_id -> {"balance": int, "last_work": int, "inventory": [str]}
-            "warns": {},    # guild_id -> {user_id: [{"by": int, "reason": str, "ts": int}]}
-            "mutes": {},    # guild_id -> {user_id: unmute_ts}
-            "bans": {},     # guild_id -> {user_id: unban_ts}
+            "tickets": {},  
+            "economy": {},  
+            "warns": {},   
+            "mutes": {},    
+            "bans": {},     
             "store": [
                 {"name": "VIP Pass", "price": 500},
                 {"name": "Badge", "price": 200},
@@ -54,7 +47,7 @@ DATA = load_data()
 INTENTS = discord.Intents.default()
 INTENTS.guilds = True
 INTENTS.members = True
-# message_content non necessario per slash commands
+
 
 class Bot(commands.Bot):
     def __init__(self):
@@ -65,40 +58,40 @@ class Bot(commands.Bot):
         self.background_tasks.start()
 
     async def on_ready(self):
-        # Sync slash commands
+       
         if not self.synced:
             await self.tree.sync()
             self.synced = True
         print(f"Online come {self.user} ({self.user.id})")
 
-        # Autocreate ticket category / logs channel se mancano
+       
         for guild in self.guilds:
             await ensure_infra(guild)
 
     @tasks.loop(seconds=30)
     async def background_tasks(self):
-        # Unmute programmati
+        
         now = now_ts()
         for guild in self.guilds:
             g_id = str(guild.id)
-            # Unmute
+            
             mutes = DATA.get("mutes", {}).get(g_id, {})
             to_unmute = [int(uid) for uid, ts in mutes.items() if ts and now >= ts]
             for uid in to_unmute:
                 member = guild.get_member(uid)
                 if member:
-                    await ensure_muted_role(guild)  # ensure role exists
+                    await ensure_muted_role(guild)  
                     muted_role = discord.utils.get(guild.roles, name="Muted")
                     if muted_role in member.roles:
                         try:
                             await member.remove_roles(muted_role, reason="Auto unmute (timer scaduto)")
                         except Exception:
                             pass
-                # remove from schedule
+                
                 DATA["mutes"][g_id].pop(str(uid), None)
                 save_data()
 
-            # Unban
+       
             bans = DATA.get("bans", {}).get(g_id, {})
             to_unban = [int(uid) for uid, ts in bans.items() if ts and now >= ts]
             for uid in to_unban:
@@ -115,14 +108,14 @@ class Bot(commands.Bot):
 
 bot = Bot()
 
-# ---------- Utility e infrastruttura ----------
+
 
 async def ensure_infra(guild: discord.Guild):
-    # Logs channel
+ 
     logs_channel_id = DATA.get("logs_channel_id")
     logs_channel = guild.get_channel(logs_channel_id) if logs_channel_id else None
     if logs_channel is None:
-        # crea canale mod-logs se non esiste
+       
         existing = discord.utils.get(guild.text_channels, name="mod-logs")
         if existing:
             logs_channel = existing
@@ -134,11 +127,11 @@ async def ensure_infra(guild: discord.Guild):
         DATA["logs_channel_id"] = logs_channel.id if logs_channel else None
         save_data()
 
-    # Ticket category
+
     ticket_cat_id = DATA.get("ticket_category_id")
     ticket_cat = guild.get_channel(ticket_cat_id) if ticket_cat_id else None
     if ticket_cat is None or not isinstance(ticket_cat, discord.CategoryChannel):
-        # crea categoria tickets se non esiste
+      
         existing_cat = discord.utils.get(guild.categories, name="tickets")
         if existing_cat:
             ticket_cat = existing_cat
@@ -155,7 +148,7 @@ async def ensure_muted_role(guild: discord.Guild):
     if role is None:
         try:
             role = await guild.create_role(name="Muted", reason="Ruolo mute")
-            # aggiorna permessi nei canali
+         
             for channel in guild.channels:
                 try:
                     await channel.set_permissions(role, send_messages=False, speak=False, add_reactions=False)
@@ -169,7 +162,7 @@ async def log_action(guild: discord.Guild, embed: discord.Embed):
     logs_channel_id = DATA.get("logs_channel_id")
     ch = guild.get_channel(logs_channel_id) if logs_channel_id else None
     if ch is None:
-        # tenta recupero o crea
+       
         await ensure_infra(guild)
         ch = guild.get_channel(DATA.get("logs_channel_id"))
     if ch:
@@ -244,7 +237,7 @@ def is_staff(member: discord.Member) -> bool:
             return True
     return False
 
-# ---------- Ticket System ----------
+
 
 class TicketPanel(ui.View):
     def __init__(self):
@@ -272,7 +265,7 @@ async def create_ticket(interaction: Interaction):
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
         user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, embed_links=True)
     }
-    # Staff roles
+   
     for rid in DATA.get("staff_roles", []):
         role = guild.get_role(rid)
         if role:
@@ -329,7 +322,7 @@ class TicketView(ui.View):
         DATA["tickets"].pop(str(channel.id), None)
         save_data()
 
-# ---------- Minigiochi ----------
+
 
 class TicTacToeButton(ui.Button):
     def __init__(self, row: int, col: int):
@@ -342,7 +335,7 @@ class TicTacToeButton(ui.Button):
         await view.handle_move(interaction, self.row_idx, self.col_idx)
 
 def check_winner(board, symbol):
-    # righe, colonne, diagonali
+ 
     for i in range(3):
         if all(board[i][j] == symbol for j in range(3)): return True
         if all(board[j][i] == symbol for j in range(3)): return True
@@ -368,7 +361,7 @@ class TicTacToeView(ui.View):
 
     async def handle_move(self, interaction: Interaction, r: int, c: int):
         user_id = interaction.user.id
-        # Controllo turno
+      
         if self.turn == "X" and user_id != self.player_x:
             return await interaction.response.send_message("Non è il tuo turno.", ephemeral=True)
         if self.turn == "O":
@@ -376,17 +369,17 @@ class TicTacToeView(ui.View):
                 return await interaction.response.send_message("Attendi la mossa del bot.", ephemeral=True)
             if user_id != self.player_o:
                 return await interaction.response.send_message("Non è il tuo turno.", ephemeral=True)
-        # Casella già occupata
+       
         if self.board[r][c] != "":
             return await interaction.response.send_message("Mossa non valida: casella già occupata.", ephemeral=True)
 
-        # Effettua mossa utente
+       
         self.board[r][c] = self.turn
         self.children[r*3 + c].label = self.turn
         self.children[r*3 + c].style = ButtonStyle.success if self.turn == "X" else ButtonStyle.danger
         self.children[r*3 + c].disabled = True
 
-        # Controllo vittoria o pareggio
+        
         if check_winner(self.board, self.turn):
             for b in self.children:
                 b.disabled = True
@@ -400,11 +393,11 @@ class TicTacToeView(ui.View):
             self.stop()
             return
 
-        # Cambio turno
+   
         self.turn = "O" if self.turn == "X" else "X"
         await interaction.response.edit_message(content=f"Turno: {self.turn}", view=self)
 
-        # Mossa del bot (se vs bot e tocca a O)
+       
         if self.vs_bot and self.turn == "O":
             await asyncio.sleep(0.6)
             r2, c2 = self.bot_move()
@@ -799,3 +792,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
